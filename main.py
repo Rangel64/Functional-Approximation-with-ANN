@@ -3,8 +3,10 @@ import numpy as np
 import random as rd
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score
 import seaborn as sns
 import pickle
+import os
 
 class Perceptron:
     entrada = None
@@ -16,9 +18,9 @@ class Perceptron:
     entradas = None
     saidas = None
     
-    alpha = 0.000002
+    alpha = None
     
-    neuronios = 60
+    neuronios = None
     
     camadaX = None
     camadaA = None
@@ -42,6 +44,8 @@ class Perceptron:
     biasB = None
     biasC = None
     biasY = None
+    
+    steps = None
     
     targetsTeste = []
     
@@ -71,6 +75,7 @@ class Perceptron:
     list_accuracy_test = []
     
     aleatorio = 0.5
+    ciclos = None
     
     def get_weights_biases(self):
         return {
@@ -193,12 +198,16 @@ class Perceptron:
         self.trained = 0
         
         self.firstErro = 0
-    
-    def __init__(self, entrada,target):
+        
+    def __init__(self, entrada,target,neuronios,alpha,ciclos,steps):
         self.entrada = entrada
         self.target = target
         self.entradas = entrada.shape[1]
         self.saidas = target.shape[1]
+        self.steps = steps
+        self.alpha = alpha
+        self.neuronios = neuronios
+        self.ciclos = ciclos
         self.XA = np.zeros((self.entradas,self.neuronios))
         self.AB = np.zeros((self.neuronios,self.neuronios))
         self.BC = np.zeros((self.neuronios,self.neuronios))
@@ -218,10 +227,10 @@ class Perceptron:
         self.listaCiclo_test = []
         self.erros_test = []
         self.firstErro = 0
-    
+        
     def train(self):
         if(self.trained==0):
-            while self.ciclo<1000 and self.erro>1:
+            while self.ciclo<self.ciclos and self.erro>1:
                      
                 self.camadaA = np.dot(np.asarray(self.entrada), self.XA) + self.biasA
     
@@ -293,9 +302,9 @@ class Perceptron:
                 Y = pd.DataFrame(self.Y)
                 
                 # Combinando os dataframes de treinamento e teste
-                x_ = np.asarray(X["x"]).reshape(steps, steps)
-                y_ = np.asarray(X["y"]).reshape(steps, steps)
-                z_nn = np.asarray(Y).reshape(steps, steps)
+                x_ = np.asarray(X["x"]).reshape(self.steps, self.steps)
+                y_ = np.asarray(X["y"]).reshape(self.steps, self.steps)
+                z_nn = np.asarray(Y).reshape(self.steps, self.steps)
                 
                 data = {
                     'Epoch': self.listaCiclo,
@@ -325,7 +334,7 @@ class Perceptron:
                 
                 
                 Y_real = self.target.sort_index()
-                z_real = np.asarray(Y_real).reshape(steps, steps)
+                z_real = np.asarray(Y_real).reshape(self.steps, self.steps)
                 
                 ax = fig.add_subplot(1, 3, 3, projection='3d')
                 
@@ -349,34 +358,130 @@ class Perceptron:
             print('Modelo ja treinado')
             print('================================')   
           
+    def test(self, entrada):
+        Y_list = []
+        for i in range(entrada.shape[0]):
+            camadaA = np.dot(entrada[i], self.XA) + self.biasA
+            
+            A = np.tanh(camadaA)
     
-# Definindo os valores de x e y
-steps = 100
-x = np.linspace(-10, 10, steps)
-y = np.linspace(-10, 10, steps)
-x, y = np.meshgrid(x, y)
+            camadaB = np.dot(A, self.AB) + self.biasB
+            
+            B = np.tanh(camadaB)
+            
+            camadaC = np.dot(B, self.BC) + self.biasC
+            
+            C = np.tanh(camadaC)
+    
+            camadaY = np.dot(C, self.CY) + self.biasY
+            
+            Y_list.append(camadaY)
+    
+        return np.asarray(Y_list)
 
-# f = (np.sin(x/1.5) * np.sin(y/1.5)) / (x * y)
+def criar_diretorio(path):
+    if(not os.path.exists(path)):
+        os.makedirs(path)
 
-f = np.sin(x/2) + np.sin(y/2)
+def main():
+    
+    # Definindo os valores de x e y
+    steps = 100
+    x = np.linspace(-10, 10, steps)
+    y = np.linspace(-10, 10, steps)
+    x, y = np.meshgrid(x, y)
+    
+    # f = (np.sin(x/1.5) * np.sin(y/1.5)) / (x * y)
 
-# f = 3*(np.e**(-(x**2+y**2)/0.5))
+    f = np.sin(x/2) + np.sin(y/2)
 
-# Transformando os arrays em dataframes
-df_inputs = pd.DataFrame({'x': x.flatten(), 'y': y.flatten()})
-df_targets = pd.DataFrame({'f': f.flatten()})
+    # f = 3*(np.e**(-(x**2+y**2)/0.5))
 
+    # Transformando os arrays em dataframes
+    df_inputs = pd.DataFrame({'x': x.flatten(), 'y': y.flatten()})
+    df_targets = pd.DataFrame({'f': f.flatten()})
+    
+    listaR2Treinamento = []
+    listaR2 = []
+    
+    for neuronios in range(5, 15, 5):
+        
+        pathModel = "models/"
+        pathTreinamento = "treinamentos/"
 
-model = Perceptron(df_inputs, df_targets)
-model.reset()
-model.train()
+        criar_diretorio(pathModel)
+        criar_diretorio(pathTreinamento)
 
-model.save_weights_biases('pesosMLP/pesos.pkl')
+        criar_diretorio(pathModel+('/neuronios_%d'%(neuronios)))
+        criar_diretorio(pathTreinamento+('/neuronios_%d'%(neuronios)))
 
+        for alpha in range(10, 30, 10):
+            criar_diretorio(pathModel+('/neuronios_%d'%(neuronios))+('/alpha_%d'%alpha))
+            criar_diretorio(pathTreinamento+('/neuronios_%d'%(neuronios))+('/alpha_%d'%alpha))
 
+            for ciclos in range(100, 1500, 100):
+                criar_diretorio(pathModel+('/neuronios_%d'%(neuronios))+('/alpha_%d'%alpha)+('/ciclos_%d'%ciclos))
+                criar_diretorio(pathTreinamento+('/neuronios_%d'%(neuronios))+('/alpha_%d'%alpha)+('/ciclos_%d'%ciclos))
+                
+                r2_treinamento_list = []
 
+                for i in range(2):
+                    model = Perceptron(df_inputs, df_targets,neuronios,alpha/10**(6),ciclos,steps)
+                    model.reset()
+                    model.train()
+    
+                    nameModel = '/model_teste_%d.h5'%(i)
+                        
+                    model.save_weights_biases(pathModel+('/neuronios_%d'%(neuronios))+('/alpha_%d'%alpha)+('/ciclos_%d'%ciclos)+nameModel)
+                    
+                    taxas2 = model.test(np.asarray(df_inputs))
+                    taxas2 = taxas2.reshape((taxas2.shape[0],taxas2.shape[1]))
+                    alvo2 = np.asarray(df_targets)
+                    
+                    
+                    print(taxas2.shape)
+                    print(alvo2.shape)
+                    
+                    r2_treinamento = round(r2_score(alvo2, taxas2), 5)
+                    
+                    if(r2_treinamento>1 or r2_treinamento<-1):
+                        r2_treinamento = 0 
+                    
+                    r2_treinamento_list.append(r2_treinamento)
+                    
+                    listaR2Treinamento.append(r2_treinamento)
+                    
+            
+                    listaR2.append(listaR2Treinamento) 
 
+                    matrizR2 = np.asarray(listaR2)
+                    matrizR2 = np.transpose(matrizR2)
+            
+                    df = pd.DataFrame(data=matrizR2, columns=['R2 treinamento'])
+                    
+                    nameTreinamento = '/teste_%d.csv'%(i)
+                    
+                    df.to_csv(pathTreinamento+('/neuronios_%d'%(neuronios))+('/alpha_%d'%alpha)+('/ciclos_%d'%ciclos)+nameTreinamento)
+            
+                    listaR2Treinamento.clear()
+                    listaR2.clear()
+                    
+                # Calculando a média, desvio padrão e o maior valor de cada lista
+                media_treinamento = sum(r2_treinamento_list) / len(r2_treinamento_list)
+                desvio_padrao_treinamento = (sum([(x-media_treinamento)**2 for x in r2_treinamento_list]) / len(r2_treinamento_list))**0.5
+                maximo_treinamento = max(r2_treinamento_list)
+                           
+                # Criando um DataFrame com esses valores
+                df = pd.DataFrame({
+                    'Metrica': ['Media', 'Desvio Padrao', 'Maximo'],
+                    'Treinamento': [media_treinamento, desvio_padrao_treinamento, maximo_treinamento],
+                })
+                
+                # Salvando o DataFrame em um arquivo CSV
+                df.to_csv(pathTreinamento+('/neuronios_%d'%(neuronios))+('/alpha_%d'%alpha)+('/ciclos_%d'%ciclos)+'/Metricas.csv', index=False)  
+                    
 
-
+if __name__ == "__main__":
+    main()
 
 
